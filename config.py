@@ -12,30 +12,56 @@ ai_client = OpenAI(
     api_key=os.getenv("GITHUB_TOKEN")
 )
 
-# (도메인, 기사 수, 우선순위 티어)
-NEWS_SOURCES = [
-    # Tier 1: 팩트 기반 통신사 — bias 최소, 1차 데이터
-    {"domain": "reuters.com",       "count": 6, "tier": 1},
-    {"domain": "apnews.com",        "count": 6, "tier": 1},
-    # Tier 2: 글로벌 영향력 해석 — 정책·경제 심층 분석
-    {"domain": "bbc.com",           "count": 6, "tier": 2},
-    {"domain": "nytimes.com",       "count": 6, "tier": 2},
-    # Tier 3: 한국 팩트 — 국내 정치·경제·북한
-    {"domain": "en.yna.co.kr",      "count": 4, "tier": 3},
-    {"domain": "koreaherald.com",   "count": 4, "tier": 3},
-    # Tier 4: 경제·전략 분석 — 시장·금융 인사이트
-    {"domain": "bloomberg.com",     "count": 4, "tier": 4},
-    {"domain": "ft.com",            "count": 4, "tier": 4},
-    # Tier 5: 아시아 지역 시각 — 동북아 연결
-    {"domain": "asia.nikkei.com",   "count": 3, "tier": 5},
-    {"domain": "scmp.com",          "count": 3, "tier": 5},
-    # Tier 6: 보조 참고 — 해석 있으나 편차 존재
-    {"domain": "cnn.com",           "count": 3, "tier": 6},
-    {"domain": "japantimes.co.jp",  "count": 3, "tier": 6},
-    {"domain": "thediplomat.com",   "count": 2, "tier": 6},
-    # Tier 7: 중국 입장 확인용 — propaganda 성격, 참고만
-    {"domain": "chinadaily.com.cn", "count": 1, "tier": 7},
-    {"domain": "globaltimes.cn",    "count": 1, "tier": 7},
+# === 1단계: 팩트 체크 (글로벌 1차 데이터) ===
+# === 2단계: 국내/지역 팩트 ===
+# === 3단계: 글로벌 교차 검증 ===
+# === 4단계: 경제/산업 흐름 ===
+# === 5단계: 미래 기술 및 지정학 ===
+# === 보조: 서구권 여론 ===
+
+NEWSAPI_SOURCES = [
+    {"domain": "apnews.com",    "count": 3, "tier": 1},
+    {"domain": "bbc.com",       "count": 3, "tier": 3},
+    {"domain": "bloomberg.com", "count": 2, "tier": 4},
+    {"domain": "cnn.com",       "count": 2, "tier": 6},
 ]
 
-NEWS_DOMAINS = ",".join(s["domain"] for s in NEWS_SOURCES)
+NEWSAPI_DOMAINS = ",".join(s["domain"] for s in NEWSAPI_SOURCES)
+
+RSS_SOURCES = [
+    # 1단계
+    # (Reuters RSS 미지원 → GDELT)
+    # 2단계
+    {"domain": "en.yna.co.kr",      "count": 3, "tier": 2,
+     "rss": "https://en.yna.co.kr/RSS/news.xml"},
+    # 3단계
+    {"domain": "aljazeera.com",     "count": 2, "tier": 3,
+     "rss": "https://www.aljazeera.com/xml/rss/all.xml"},
+    {"domain": "scmp.com",          "count": 2, "tier": 3,
+     "rss": "https://www.scmp.com/rss/91/feed"},
+    # 4단계
+    {"domain": "asia.nikkei.com",   "count": 2, "tier": 4,
+     "rss": "https://asia.nikkei.com/rss/feed/nar"},
+    {"domain": "ft.com",            "count": 2, "tier": 4,
+     "rss": "https://www.ft.com/rss/home"},
+    # 5단계
+    {"domain": "thediplomat.com",   "count": 2, "tier": 5,
+     "rss": "https://thediplomat.com/feed/"},
+    {"domain": "technologyreview.com", "count": 2, "tier": 5,
+     "rss": "https://www.technologyreview.com/feed/"},
+    # 보조
+    {"domain": "nytimes.com",       "count": 2, "tier": 6,
+     "rss": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"},
+    {"domain": "japantimes.co.jp",  "count": 2, "tier": 6,
+     "rss": "https://www.japantimes.co.jp/feed/"},
+]
+
+GDELT_SOURCES = [
+    {"domain": "reuters.com",     "count": 3, "tier": 1},
+    {"domain": "koreaherald.com", "count": 2, "tier": 2},
+]
+
+ALL_SOURCES = sorted(
+    NEWSAPI_SOURCES + RSS_SOURCES + GDELT_SOURCES,
+    key=lambda s: s["tier"]
+)
