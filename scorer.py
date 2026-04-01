@@ -29,7 +29,8 @@ def score_articles(articles: list[Article]) -> list[Article]:
 def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> list[Article]:
     items = []
     for idx, a in enumerate(batch):
-        items.append(f"[{offset + idx}] [{a.source_role}] {a.source}\n제목: {a.title}\n내용: {a.content[:300]}")
+        content_label = "본문" if a.has_body else "헤드라인만"
+        items.append(f"[{offset + idx}] [{a.source_role}] {a.source} ({content_label})\n제목: {a.title}\n내용: {a.content[:300]}")
 
     prompt = f"""다음 뉴스 기사들의 중요도를 평가해주세요.
 
