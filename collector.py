@@ -8,6 +8,10 @@ import trafilatura
 from dataclasses import dataclass, field
 from googlenewsdecoder import new_decoderv1
 
+# 동시 크롤링 제한 (서버 부하 방지)
+CRAWL_CONCURRENCY = 10
+USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
 
 @dataclass
 class Article:
@@ -126,6 +130,23 @@ def clean_body(text: str) -> str:
     return "\n".join(cleaned).strip()
 
 
+def _truncate_at_sentence(text: str, max_chars: int = 3000) -> str:
+    """문장 단위로 절삭 (문장 중간에서 잘리지 않도록)"""
+    if len(text) <= max_chars:
+        return text
+    # max_chars 이내에서 마지막 문장 종결 부호 찾기
+    truncated = text[:max_chars]
+    last_period = max(
+        truncated.rfind(". "),
+        truncated.rfind(".\n"),
+        truncated.rfind("? "),
+        truncated.rfind("! "),
+    )
+    if last_period > max_chars * 0.5:  # 절반 이상 위치에서 찾은 경우만
+        return truncated[:last_period + 1]
+    return truncated
+
+
 def fetch_body(article: Article) -> tuple[str, bool]:
     """본문 크롤링 시도. (본문 텍스트, 성공 여부) 반환"""
     try:
@@ -136,14 +157,22 @@ def fetch_body(article: Article) -> tuple[str, bool]:
         if text and len(text.strip()) > 50:
             text = clean_body(text)
             if len(text.strip()) > 50:
-                return text[:3000], True
+                return _truncate_at_sentence(text), True
         return article.title, False
     except Exception:
         return article.title, False
 
 
+async def _crawl_article(semaphore: asyncio.Semaphore, article: Article) -> None:
+    """세마포어로 동시성 제한하며 본문 크롤링 (병렬)"""
+    async with semaphore:
+        loop = asyncio.get_event_loop()
+        article.content, article.has_body = await loop.run_in_executor(None, fetch_body, article)
+
+
 async def collect_all() -> list[Article]:
-    async with aiohttp.ClientSession() as session:
+    headers = {"User-Agent": USER_AGENT}
+    async with aiohttp.ClientSession(headers=headers) as session:
         tasks = [fetch_feed(session, name, cfg) for name, cfg in FEEDS.items()]
         results = await asyncio.gather(*tasks)
 
@@ -159,19 +188,16 @@ async def collect_all() -> list[Article]:
     if google_count:
         print(f"[URL 디코딩] Google News {google_count}건 → 실제 URL 변환 완료")
 
-    # 본문 크롤링 (deferred 소스 제외)
-    body_success = 0
-    deferred_count = 0
-    for article in all_articles:
-        if FEEDS.get(article.source, {}).get("deferred"):
-            deferred_count += 1
-            continue  # 중요도 점수화 후 선별 크롤링
-        article.content, article.has_body = fetch_body(article)
-        if article.has_body:
-            body_success += 1
-        await asyncio.sleep(1.0)  # 요청 간격
+    # 본문 크롤링 — 병렬 (deferred 소스 제외)
+    semaphore = asyncio.Semaphore(CRAWL_CONCURRENCY)
+    crawl_targets = [a for a in all_articles if not FEEDS.get(a.source, {}).get("deferred")]
+    deferred_count = len(all_articles) - len(crawl_targets)
 
-    headline_only = len(all_articles) - body_success - deferred_count
+    crawl_tasks = [_crawl_article(semaphore, a) for a in crawl_targets]
+    await asyncio.gather(*crawl_tasks)
+
+    body_success = sum(1 for a in crawl_targets if a.has_body)
+    headline_only = len(crawl_targets) - body_success
     print(f"[수집 완료] 총 {len(all_articles)}건 (본문 {body_success}건 / 헤드라인만 {headline_only}건 / 지연 크롤링 {deferred_count}건)")
     return all_articles
 
