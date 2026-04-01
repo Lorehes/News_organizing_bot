@@ -1,6 +1,6 @@
 feedparser>=6.0
 aiohttp>=3.9
-newspaper4k>=0.9
+trafilatura>=2.0
 scikit-learn>=1.3
 requests>=2.31
 anthropic>=0.40
