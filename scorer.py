@@ -89,13 +89,12 @@ SCORING_PROMPT = """/no_think
 
 
 def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> list[Article]:
+    # 배치 내 0-based 인덱스 사용 (Qwen3가 항상 0부터 반환하도록)
     items = []
-    expected_indices = set()
+    expected_indices = set(range(len(batch)))
     for idx, a in enumerate(batch):
         content_label = "본문" if a.has_body else "헤드라인만"
-        article_idx = offset + idx
-        expected_indices.add(article_idx)
-        items.append(f"[{article_idx}] [{a.source_role}] {a.source} ({content_label})\n제목: {a.title}\n내용: {a.content[:300]}")
+        items.append(f"[{idx}] [{a.source_role}] {a.source} ({content_label})\n제목: {a.title}\n내용: {a.content[:300]}")
 
     prompt = SCORING_PROMPT.format(articles="\n---\n".join(items))
 
@@ -121,8 +120,7 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
                 print(f"  [경고] 배치 {offset}: index {missing} 누락 → 기본값 5.0 적용")
 
             for idx, article in enumerate(batch):
-                article_idx = offset + idx
-                s = score_map.get(article_idx, {})
+                s = score_map.get(idx, {})
                 g = _clamp(s.get("global", 5))
                 st = _clamp(s.get("structural", 5))
                 k = _clamp(s.get("korea", 5))
@@ -130,7 +128,7 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
                 article.importance_score = round(g * W_GLOBAL + st * W_STRUCTURAL + k * W_KOREA, 1)
                 article.score_reason = s.get("reason", "")
 
-                if article_idx not in returned_indices:
+                if idx not in returned_indices:
                     article.score_reason = "[기본값] LLM 응답 누락"
 
             return batch
