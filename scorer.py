@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import time
 import requests
 import json
 
@@ -11,7 +13,7 @@ MODEL = "qwen3-14b-mlx"  # LM Studio에서 로드한 모델명
 
 def score_articles(articles: list[Article]) -> list[Article]:
     """Qwen3로 기사별 중요도 1~10점 점수화"""
-    batch_size = 20
+    batch_size = 10
     all_scored = []
 
     for i in range(0, len(articles), batch_size):
@@ -24,7 +26,7 @@ def score_articles(articles: list[Article]) -> list[Article]:
     return all_scored
 
 
-def _score_batch(batch: list[Article], offset: int) -> list[Article]:
+def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> list[Article]:
     items = []
     for idx, a in enumerate(batch):
         items.append(f"[{offset + idx}] [{a.source_role}] {a.source}\n제목: {a.title}\n내용: {a.content[:300]}")
@@ -46,29 +48,37 @@ def _score_batch(batch: list[Article], offset: int) -> list[Article]:
   ]
 }}"""
 
-    try:
-        res = requests.post(LM_STUDIO_URL, json={
-            "model": MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-            "response_format": {"type": "json_object"},
-        }, timeout=120)
+    for attempt in range(max_retries):
+        try:
+            res = requests.post(LM_STUDIO_URL, json={
+                "model": MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+            }, timeout=300)
 
-        content = res.json()["choices"][0]["message"]["content"]
-        result = json.loads(content)
-        score_map = {s["index"]: s for s in result["scores"]}
+            content = res.json()["choices"][0]["message"]["content"]
+            # Qwen3 응답에서 JSON 블록 추출 (thinking 텍스트 제거)
+            json_match = re.search(r'\{[\s\S]*"scores"[\s\S]*\}', content)
+            result = json.loads(json_match.group())
+            score_map = {s["index"]: s for s in result["scores"]}
 
-        for idx, article in enumerate(batch):
-            s = score_map.get(offset + idx, {})
-            article.importance_score = s.get("score", 5.0)
-            article.score_reason = s.get("reason", "")
+            for idx, article in enumerate(batch):
+                s = score_map.get(offset + idx, {})
+                article.importance_score = s.get("score", 5.0)
+                article.score_reason = s.get("reason", "")
 
-    except Exception as e:
-        print(f"[점수화 실패] 배치 {offset}: {e}")
-        for article in batch:
-            article.importance_score = 5.0
-            article.score_reason = ""
+            return batch
 
+        except Exception as e:
+            print(f"[점수화 실패] 배치 {offset}, 시도 {attempt + 1}/{max_retries}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(3)
+
+    # 모든 재시도 실패 시 기본값
+    print(f"[점수화 포기] 배치 {offset}: {max_retries}회 모두 실패")
+    for article in batch:
+        article.importance_score = 5.0
+        article.score_reason = ""
     return batch
 
 
