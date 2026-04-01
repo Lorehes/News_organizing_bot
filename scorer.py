@@ -15,11 +15,15 @@ def score_articles(articles: list[Article]) -> list[Article]:
     """Qwen3로 기사별 중요도 1~10점 점수화"""
     batch_size = 10
     all_scored = []
+    total_batches = (len(articles) + batch_size - 1) // batch_size
 
     for i in range(0, len(articles), batch_size):
         batch = articles[i:i + batch_size]
+        batch_num = i // batch_size + 1
+        print(f"  [배치 {batch_num}/{total_batches}] {len(batch)}건 점수화 중...")
         scored = _score_batch(batch, offset=i)
         all_scored.extend(scored)
+        print(f"  [배치 {batch_num}/{total_batches}] 완료")
 
     # 중요도 내림차순 정렬
     all_scored.sort(key=lambda x: x.importance_score, reverse=True)
