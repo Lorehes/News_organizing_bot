@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import anthropic
+from datetime import datetime
 
 from collector import Article
 
 client = anthropic.Anthropic()  # ANTHROPIC_API_KEY 환경변수
 
+SYSTEM_PROMPT = """당신은 글로벌 뉴스 인텔리전스 분석가입니다.
+다수의 신뢰할 수 있는 국제 매체에서 수집된 뉴스를 바탕으로,
+한국인 독자를 위한 전략적 브리핑을 작성합니다.
+
+원칙:
+- 사실 기반 서술: 수집된 기사에 없는 정보를 추측하지 마세요
+- 다각적 시각: 같은 이슈를 보도한 복수 매체의 관점을 반영하세요
+- 구조적 분석: 단순 나열이 아닌, 이슈 간 연결과 흐름을 보여주세요
+- 한국 관점: 한국 경제·안보에 미치는 영향을 구체적으로 짚어주세요"""
+
 
 def generate_briefing(top_articles: list[Article], max_retries: int = 3) -> dict:
     """Claude Sonnet으로 브리핑 생성 (재시도 최대 3회)"""
+
+    today = datetime.now().strftime("%Y년 %m월 %d일")
 
     # 소스 역할별 그룹핑
     by_role: dict[str, list[Article]] = {}
@@ -18,12 +31,14 @@ def generate_briefing(top_articles: list[Article], max_retries: int = 3) -> dict
     sections = []
     for role, arts in by_role.items():
         lines = "\n".join([
-            f"  [{a.source}] {a.title} (중요도 {a.importance_score:.1f})\n  {a.content[:200]}"
+            f"  [{a.source}] {a.title} (중요도 {a.importance_score:.1f})\n  {a.content[:500]}"
             for a in arts
         ])
         sections.append(f"[{role}]\n{lines}")
 
-    prompt = f"""다음은 오늘 전 세계에서 수집된 주요 뉴스입니다. (Qwen3가 중요도 상위 30건으로 선별)
+    prompt = f"""오늘은 {today}입니다.
+
+다음은 오늘 전 세계에서 수집된 주요 뉴스입니다. (Qwen3가 중요도 상위 {len(top_articles)}건으로 선별)
 
 {"=" * 60}
 {chr(10).join(sections)}
@@ -68,12 +83,20 @@ def generate_briefing(top_articles: list[Article], max_retries: int = 3) -> dict
             response = client.messages.create(
                 model="claude-sonnet-4-5",
                 max_tokens=8000,
+                system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
+
+            # stop_reason 확인 — 토큰 한도에서 잘렸는지 감지
+            stop_reason = response.stop_reason
+            if stop_reason == "max_tokens":
+                print(f"[경고] 브리핑이 max_tokens({8000})에서 잘렸습니다. 출력이 불완전할 수 있습니다.")
+
             return {
                 "text": response.content[0].text,
                 "input_tokens": response.usage.input_tokens,
                 "output_tokens": response.usage.output_tokens,
+                "truncated": stop_reason == "max_tokens",
             }
         except Exception as e:
             last_error = e
