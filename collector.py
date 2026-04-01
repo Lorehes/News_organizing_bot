@@ -28,7 +28,7 @@ FEEDS = {
     "Yonhap":       {"url": "https://en.yna.co.kr/RSS/news.xml",                      "role": "국내팩트"},
     "Korea Herald": {"url": "https://www.koreaherald.com/rss/newsAll",                 "role": "국내팩트"},
     "BBC World":    {"url": "https://feeds.bbci.co.uk/news/world/rss.xml",             "role": "교차검증"},
-    "Al Jazeera":   {"url": "https://www.aljazeera.com/xml/rss/all.xml",               "role": "교차검증"},
+    "Al Jazeera":   {"url": "https://news.google.com/rss/search?q=site:aljazeera.com", "role": "교차검증"},
     "SCMP":         {"url": "https://www.scmp.com/rss/91/feed",                        "role": "교차검증"},
     "The Guardian": {"url": "https://www.theguardian.com/world/rss",                  "role": "교차검증"},
     "The Diplomat": {"url": "https://thediplomat.com/feed",                            "role": "지정학"},
