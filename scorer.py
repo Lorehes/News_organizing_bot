@@ -36,7 +36,8 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
         content_label = "본문" if a.has_body else "헤드라인만"
         items.append(f"[{offset + idx}] [{a.source_role}] {a.source} ({content_label})\n제목: {a.title}\n내용: {a.content[:300]}")
 
-    prompt = f"""다음 뉴스 기사들의 중요도를 평가해주세요.
+    prompt = f"""/no_think
+다음 뉴스 기사들의 중요도를 평가해주세요.
 
 평가 기준:
 - 글로벌 파급력: 여러 국가·시장에 영향을 미치는 이슈
@@ -59,7 +60,8 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
                 "model": MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
-            }, timeout=300)
+                "max_tokens": 2000,
+            }, timeout=120)
 
             content = res.json()["choices"][0]["message"]["content"]
             # Qwen3 응답에서 JSON 블록 추출 (thinking 텍스트 제거)
