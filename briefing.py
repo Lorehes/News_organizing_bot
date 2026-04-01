@@ -67,7 +67,7 @@ def generate_briefing(top_articles: list[Article], max_retries: int = 3) -> dict
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-5",
-                max_tokens=3000,
+                max_tokens=8000,
                 messages=[{"role": "user", "content": prompt}],
             )
             return {
