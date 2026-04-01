@@ -90,9 +90,12 @@ SCORING_PROMPT = """/no_think
 
 def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> list[Article]:
     items = []
+    expected_indices = set()
     for idx, a in enumerate(batch):
         content_label = "본문" if a.has_body else "헤드라인만"
-        items.append(f"[{offset + idx}] [{a.source_role}] {a.source} ({content_label})\n제목: {a.title}\n내용: {a.content[:300]}")
+        article_idx = offset + idx
+        expected_indices.add(article_idx)
+        items.append(f"[{article_idx}] [{a.source_role}] {a.source} ({content_label})\n제목: {a.title}\n내용: {a.content[:300]}")
 
     prompt = SCORING_PROMPT.format(articles="\n---\n".join(items))
 
@@ -111,14 +114,24 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
             result = json.loads(json_match.group())
             score_map = {s["index"]: s for s in result["scores"]}
 
+            # 반환된 index 검증
+            returned_indices = set(score_map.keys())
+            missing = expected_indices - returned_indices
+            if missing:
+                print(f"  [경고] 배치 {offset}: index {missing} 누락 → 기본값 5.0 적용")
+
             for idx, article in enumerate(batch):
-                s = score_map.get(offset + idx, {})
+                article_idx = offset + idx
+                s = score_map.get(article_idx, {})
                 g = _clamp(s.get("global", 5))
                 st = _clamp(s.get("structural", 5))
                 k = _clamp(s.get("korea", 5))
                 # 가중 합산은 Python에서 직접 계산
                 article.importance_score = round(g * W_GLOBAL + st * W_STRUCTURAL + k * W_KOREA, 1)
                 article.score_reason = s.get("reason", "")
+
+                if article_idx not in returned_indices:
+                    article.score_reason = "[기본값] LLM 응답 누락"
 
             return batch
 
@@ -128,10 +141,10 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
                 time.sleep(3)
 
     # 모든 재시도 실패 시 기본값
-    print(f"[점수화 포기] 배치 {offset}: {max_retries}회 모두 실패")
+    print(f"[점수화 포기] 배치 {offset}: {max_retries}회 모두 실패 → 전체 기본값 5.0")
     for article in batch:
         article.importance_score = 5.0
-        article.score_reason = ""
+        article.score_reason = "[기본값] 점수화 실패"
     return batch
 
 
