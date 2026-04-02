@@ -79,11 +79,13 @@ SCORING_PROMPT = """/no_think
 
 {articles}
 
+위 기사 전부(총 {count}건)를 빠짐없이 평가하세요.
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이:
 {{
   "scores": [
-    {{"index": 0, "global": 8, "structural": 7, "korea": 6, "reason": "이유 한 줄"}},
-    {{"index": 1, "global": 5, "structural": 4, "korea": 3, "reason": "이유 한 줄"}}
+    {{"index": 0, "global": 8, "structural": 7, "korea": 6, "reason": "이유"}},
+    {{"index": 1, "global": 5, "structural": 4, "korea": 3, "reason": "이유"}},
+    ... (index {last_index}까지 총 {count}건 모두 포함)
   ]
 }}"""
 
@@ -96,7 +98,11 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
         content_label = "본문" if a.has_body else "헤드라인만"
         items.append(f"[{idx}] [{a.source_role}] {a.source} ({content_label})\n제목: {a.title}\n내용: {a.content[:300]}")
 
-    prompt = SCORING_PROMPT.format(articles="\n---\n".join(items))
+    prompt = SCORING_PROMPT.format(
+        articles="\n---\n".join(items),
+        count=len(batch),
+        last_index=len(batch) - 1,
+    )
 
     for attempt in range(max_retries):
         try:
