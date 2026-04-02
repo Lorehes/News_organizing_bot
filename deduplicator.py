@@ -31,9 +31,18 @@ def _parse_date(date_str: str) -> datetime | None:
         return None
 
 
-def filter_recent(articles: list[Article], hours: int = 24) -> list[Article]:
-    """24시간 이내 기사만 유지"""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+KST = timezone(timedelta(hours=9))
+
+
+def filter_recent(articles: list[Article]) -> list[Article]:
+    """전날 오전 8시(KST) ~ 오늘 오전 8시(KST) 기사만 유지"""
+    now_kst = datetime.now(KST)
+    today_8am = now_kst.replace(hour=8, minute=0, second=0, microsecond=0)
+    # 현재가 오전 8시 이전이면 기준을 하루 더 앞으로
+    if now_kst < today_8am:
+        today_8am -= timedelta(days=1)
+    cutoff = today_8am - timedelta(days=1)
+
     recent = []
     for a in articles:
         dt = _parse_date(a.published_at)
@@ -41,7 +50,7 @@ def filter_recent(articles: list[Article], hours: int = 24) -> list[Article]:
             recent.append(a)  # 날짜 파싱 실패 시 포함
         elif dt >= cutoff:
             recent.append(a)
-    print(f"[시간 필터] {len(articles)}건 → {len(recent)}건 (24시간 이내)")
+    print(f"[시간 필터] {len(articles)}건 → {len(recent)}건 ({cutoff.strftime('%m/%d %H:%M')}~{today_8am.strftime('%m/%d %H:%M')} KST)")
     return recent
 
 
