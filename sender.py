@@ -17,8 +17,20 @@ def _validate_env():
         raise RuntimeError(f"환경변수 누락: {', '.join(missing)} — .env 파일을 확인하세요")
 
 
+def _inline_markdown(text: str) -> str:
+    """인라인 마크다운 → HTML 변환 (bold, italic, link)"""
+    # 링크: [text](url)
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)',
+                  r'<a href="\2" style="color:#2980b9;">\1</a>', text)
+    # 볼드: **text**
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    # 이탤릭: *text*
+    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+    return text
+
+
 def _markdown_to_html(text: str) -> str:
-    """마크다운 텍스트를 간단한 HTML로 변환"""
+    """마크다운 텍스트를 HTML로 변환"""
     lines = text.split("\n")
     html_lines = []
     in_list = False
@@ -34,18 +46,24 @@ def _markdown_to_html(text: str) -> str:
             html_lines.append("<br>")
             continue
 
-        # 제목 (## / ###)
+        # 제목 (# / ## / ###)
         if stripped.startswith("### "):
             if in_list:
                 html_lines.append("</ul>")
                 in_list = False
-            html_lines.append(f'<h3 style="color:#1a5276;margin:18px 0 8px 0;">{stripped[4:]}</h3>')
+            html_lines.append(f'<h3 style="color:#1a5276;margin:18px 0 8px 0;">{_inline_markdown(stripped[4:])}</h3>')
             continue
         if stripped.startswith("## "):
             if in_list:
                 html_lines.append("</ul>")
                 in_list = False
-            html_lines.append(f'<h2 style="color:#154360;margin:24px 0 10px 0;border-bottom:2px solid #2c3e50;padding-bottom:4px;">{stripped[3:]}</h2>')
+            html_lines.append(f'<h2 style="color:#154360;margin:24px 0 10px 0;border-bottom:2px solid #2c3e50;padding-bottom:4px;">{_inline_markdown(stripped[3:])}</h2>')
+            continue
+        if stripped.startswith("# "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f'<h1 style="color:#0b2942;margin:28px 0 12px 0;border-bottom:3px solid #1a5276;padding-bottom:6px;">{_inline_markdown(stripped[2:])}</h1>')
             continue
 
         # 구분선
@@ -61,20 +79,20 @@ def _markdown_to_html(text: str) -> str:
             if not in_list:
                 html_lines.append('<ul style="margin:4px 0;">')
                 in_list = True
-            html_lines.append(f"<li>{stripped[2:]}</li>")
+            html_lines.append(f"<li>{_inline_markdown(stripped[2:])}</li>")
             continue
 
         # 번호 리스트 (1. 2. 등)
         if re.match(r'^\d+\.\s', stripped):
             content = re.sub(r'^\d+\.\s', '', stripped)
-            html_lines.append(f'<p style="margin:4px 0;"><strong>{stripped[:stripped.index(" ")]}</strong> {content}</p>')
+            html_lines.append(f'<p style="margin:4px 0;"><strong>{stripped[:stripped.index(" ")]}</strong> {_inline_markdown(content)}</p>')
             continue
 
         # 일반 텍스트
         if in_list:
             html_lines.append("</ul>")
             in_list = False
-        html_lines.append(f'<p style="margin:4px 0;line-height:1.6;">{stripped}</p>')
+        html_lines.append(f'<p style="margin:4px 0;line-height:1.6;">{_inline_markdown(stripped)}</p>')
 
     if in_list:
         html_lines.append("</ul>")
