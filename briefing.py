@@ -2,20 +2,15 @@ from __future__ import annotations
 
 import anthropic
 from datetime import datetime
+from pathlib import Path
 
 from collector import Article
 
 client = anthropic.Anthropic()  # ANTHROPIC_API_KEY 환경변수
 
-SYSTEM_PROMPT = """당신은 글로벌 뉴스 인텔리전스 분석가입니다.
-다수의 신뢰할 수 있는 국제 매체에서 수집된 뉴스를 바탕으로,
-한국인 독자를 위한 전략적 브리핑을 작성합니다.
-
-원칙:
-- 사실 기반 서술: 수집된 기사에 없는 정보를 추측하지 마세요
-- 다각적 시각: 같은 이슈를 보도한 복수 매체의 관점을 반영하세요
-- 구조적 분석: 단순 나열이 아닌, 이슈 간 연결과 흐름을 보여주세요
-- 한국 관점: 한국 경제·안보에 미치는 영향을 구체적으로 짚어주세요"""
+PROMPTS_DIR = Path(__file__).parent / "prompts"
+SYSTEM_PROMPT = (PROMPTS_DIR / "briefing_system.txt").read_text(encoding="utf-8")
+BRIEFING_TEMPLATE = (PROMPTS_DIR / "briefing_template.txt").read_text(encoding="utf-8")
 
 
 def generate_briefing(top_articles: list[Article], max_retries: int = 3) -> dict:
@@ -36,46 +31,11 @@ def generate_briefing(top_articles: list[Article], max_retries: int = 3) -> dict
         ])
         sections.append(f"[{role}]\n{lines}")
 
-    prompt = f"""오늘은 {today}입니다.
-
-다음은 오늘 전 세계에서 수집된 주요 뉴스입니다. (Qwen3가 중요도 상위 {len(top_articles)}건으로 선별)
-
-{"=" * 60}
-{chr(10).join(sections)}
-{"=" * 60}
-
-아래 형식으로 분석해주세요.
-
-## 오늘의 세계 — 3줄 요약
-(핵심 흐름 3가지를 각 1~2문장으로. 읽는 즉시 오늘 세계 상황을 파악할 수 있게)
-
-## 영역별 브리핑
-
-### 정치·안보
-(주요 이슈 2~3개. 각 이슈당 3~5문장. 배경·현재·의미 순서로 서술)
-
-### 경제·시장
-(주요 이슈 2~3개. 각 이슈당 3~5문장. 수치와 흐름 포함)
-
-### 기술·지정학
-(주요 이슈 1~2개. 기술 패권 이동, 공급망 변화 중심)
-
-### 한국 관련
-(한국에 직간접 영향을 주는 이슈. 없으면 생략)
-
-## 이번 주 주목할 변수
-(향후 7일 내 전개될 가능성 있는 이슈 2~3개. 근거 포함)
-
-## 오늘 꼭 읽어볼 기사 Top 5
-(위 기사 중 정독 가치가 높은 5개 선정. 형식:)
-1. [소스] 제목
-   추천 이유: (전략적 가치 한 줄)
-   링크: URL
-
-(2~5번 동일)
-
----
-총 분량 기준: 읽는 데 약 15분"""
+    prompt = BRIEFING_TEMPLATE.format(
+        today=today,
+        top_count=len(top_articles),
+        sections="\n".join(sections),
+    )
 
     last_error = None
     for attempt in range(max_retries):
