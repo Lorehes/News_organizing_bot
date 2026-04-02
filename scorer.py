@@ -18,7 +18,7 @@ W_KOREA = 0.25       # 한국 관련성
 
 def score_articles(articles: list[Article]) -> list[Article]:
     """Qwen3로 기사별 중요도 3축 평가 → 가중 합산"""
-    batch_size = 10
+    batch_size = 20
     all_scored = []
     total_batches = (len(articles) + batch_size - 1) // batch_size
 
@@ -81,10 +81,11 @@ SCORING_PROMPT = """/no_think
 
 위 기사 전부(총 {count}건)를 빠짐없이 평가하세요.
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이:
+reason은 반드시 10자 이내로 핵심만 작성하세요.
 {{
   "scores": [
-    {{"index": 0, "global": 8, "structural": 7, "korea": 6, "reason": "이유"}},
-    {{"index": 1, "global": 5, "structural": 4, "korea": 3, "reason": "이유"}},
+    {{"index": 0, "global": 8, "structural": 7, "korea": 6, "reason": "미중갈등심화"}},
+    {{"index": 1, "global": 5, "structural": 4, "korea": 3, "reason": "지역이슈"}},
     ... (index {last_index}까지 총 {count}건 모두 포함)
   ]
 }}"""
@@ -110,7 +111,7 @@ def _score_batch(batch: list[Article], offset: int, max_retries: int = 3) -> lis
                 "model": MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
-                "max_tokens": 2000,
+                "max_tokens": 4000,
             }, timeout=120)
 
             content = res.json()["choices"][0]["message"]["content"]

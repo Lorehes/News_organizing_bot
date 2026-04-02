@@ -4,6 +4,7 @@ import re
 import asyncio
 import feedparser
 import aiohttp
+import requests
 import trafilatura
 from dataclasses import dataclass, field
 from googlenewsdecoder import new_decoderv1
@@ -64,12 +65,18 @@ async def fetch_feed(session: aiohttp.ClientSession, name: str, config: dict) ->
         for entry in feed.entries[:20]:
             title = entry.get("title", "").strip()
             url = entry.get("link", "")
+            # RSS summary를 fallback 콘텐츠로 활용
+            rss_summary = re.sub(r"<[^>]+>", "", entry.get("summary", "")).strip()
+            if len(rss_summary) > 50 and rss_summary != title:
+                initial_content = f"{title}\n{rss_summary}"
+            else:
+                initial_content = title
             articles.append(Article(
                 source=name,
                 source_role=config["role"],
                 title=title,
                 url=url,
-                content=title,  # 초기값은 제목만, 크롤링 성공 시 본문으로 교체
+                content=initial_content,  # RSS summary 포함, 크롤링 성공 시 본문으로 교체
                 published_at=entry.get("published", ""),
             ))
         return articles
@@ -147,20 +154,33 @@ def _truncate_at_sentence(text: str, max_chars: int = 3000) -> str:
     return truncated
 
 
+BROWSER_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+
+
 def fetch_body(article: Article) -> tuple[str, bool]:
     """본문 크롤링 시도. (본문 텍스트, 성공 여부) 반환"""
     try:
+        # 1차: trafilatura 기본 크롤링
         downloaded = trafilatura.fetch_url(article.url)
+        # 2차: trafilatura 실패 시 requests로 재시도
         if not downloaded:
-            return article.title, False
+            resp = requests.get(article.url, headers=BROWSER_HEADERS, timeout=10)
+            if resp.status_code == 200 and len(resp.text) > 500:
+                downloaded = resp.text
+        if not downloaded:
+            return article.content, False  # RSS summary 유지
         text = trafilatura.extract(downloaded, include_comments=False, include_tables=False)
         if text and len(text.strip()) > 50:
             text = clean_body(text)
             if len(text.strip()) > 50:
                 return _truncate_at_sentence(text), True
-        return article.title, False
+        return article.content, False  # RSS summary 유지
     except Exception:
-        return article.title, False
+        return article.content, False  # RSS summary 유지
 
 
 async def _crawl_article(semaphore: asyncio.Semaphore, article: Article) -> None:

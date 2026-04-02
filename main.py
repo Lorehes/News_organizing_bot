@@ -15,6 +15,7 @@ from briefing import generate_briefing
 from sender import send_email
 
 CACHE_DIR = Path("cache")
+CACHE_MAX_AGE_DAYS = 7
 
 
 def _save_checkpoint(articles: list[Article], stage: str):
@@ -38,6 +39,21 @@ def _save_checkpoint(articles: list[Article], stage: str):
         json.dump(data, f, ensure_ascii=False)
 
 
+def _clean_old_cache():
+    """7일 이상 된 캐시 파일 자동 삭제"""
+    if not CACHE_DIR.exists():
+        return
+    now = time.time()
+    max_age = CACHE_MAX_AGE_DAYS * 86400
+    removed = 0
+    for f in CACHE_DIR.glob("*.json"):
+        if now - f.stat().st_mtime > max_age:
+            f.unlink()
+            removed += 1
+    if removed:
+        print(f"[캐시 정리] {removed}개 오래된 파일 삭제")
+
+
 def _load_checkpoint(stage: str) -> list[Article] | None:
     """중간 저장 데이터 로드"""
     filepath = CACHE_DIR / f"{stage}.json"
@@ -55,6 +71,7 @@ async def main():
     print("=" * 50)
 
     total_start = time.time()
+    _clean_old_cache()
 
     # 1단계: 수집
     try:
