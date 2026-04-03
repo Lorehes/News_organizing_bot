@@ -4,4 +4,5 @@ __pycache__/
 *_plan_*
 cache/
 prompts/
+logs/
 *test*
