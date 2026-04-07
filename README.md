@@ -92,6 +92,52 @@ source venv/bin/activate
 python main.py
 ```
 
+## 자동화 (macOS launchd)
+
+매일 오전 08:05에 자동 실행되도록 macOS launchd로 스케줄링되어 있습니다.
+
+### 동작 흐름
+
+1. Mac 부팅/로그인 → LM Studio 자동 시작
+2. 매일 08:05 → `run_pipeline.sh` 자동 실행
+3. LM Studio API 준비 대기 (최대 5분)
+4. 파이프라인 실행 → 이메일 발송
+5. macOS 알림으로 성공/실패 표시
+
+### Mac이 꺼져 있었다면
+
+launchd가 놓친 실행을 감지하여 Mac을 켜는 즉시 자동 보충 실행합니다.
+
+### 수동 실행
+
+```bash
+./run_pipeline.sh
+```
+
+### launchd 설정 (최초 1회)
+
+```bash
+# LM Studio 로그인 시 자동 시작 등록
+launchctl load ~/Library/LaunchAgents/com.lmstudio.autostart.plist
+
+# 파이프라인 매일 08:05 스케줄 등록
+launchctl load ~/Library/LaunchAgents/com.news-intelligence.daily.plist
+
+# 등록 확인
+launchctl list | grep -E "news-intelligence|lmstudio"
+
+# 스케줄 해제 (필요 시)
+launchctl unload ~/Library/LaunchAgents/com.news-intelligence.daily.plist
+```
+
+### 로그
+
+실행 로그는 `logs/` 디렉토리에 일별로 저장됩니다 (30일 자동 정리).
+
+```bash
+cat logs/$(date +%Y-%m-%d).log
+```
+
 ## 프로젝트 구조
 
 ```
@@ -102,8 +148,11 @@ News_organizing_bot/
 ├── scorer.py            # LLM 중요도 점수화
 ├── briefing.py          # Claude API 브리핑 생성
 ├── sender.py            # 이메일 발송
+├── run_pipeline.sh      # 자동 실행 래퍼 스크립트
 ├── requirements.txt     # 의존성
 ├── .env                 # 환경변수 (git 제외)
+├── prompts/             # LLM 프롬프트 파일 (git 제외)
+├── logs/                # 실행 로그 (git 제외)
 └── cache/               # 체크포인트 캐시 (git 제외)
 ```
 
